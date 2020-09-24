@@ -430,7 +430,7 @@ class Window(TmuxMappingObject, TmuxRelationalObject):
             'window_index',
             'window_id',
         ] + formats.PANE_FORMATS
-        tmux_formats = ['#{%s}\t' % f for f in pformats]
+        tmux_formats = ['#{%s}$@$' % f for f in pformats]
 
         # '-t%s' % self.attached_pane.get('pane_id'),
         # 2013-10-18 LOOK AT THIS, rm'd it..
@@ -471,7 +471,7 @@ class Window(TmuxMappingObject, TmuxRelationalObject):
         else:
             pane = pane.stdout[0]
 
-            pane = dict(zip(pformats, pane.split('\t')))
+            pane = dict(zip(pformats, pane.split('$@$')))
 
             # clear up empty dict
             pane = dict((k, v) for k, v in pane.items() if v)
