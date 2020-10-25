@@ -143,7 +143,7 @@ class EnvironmentMixin(object):
         return vars_dict
 
 
-class tmux_cmd(object):
+class TmuxCommand(object):
 
     """
     :term:`tmux(1)` command via :py:mod:`subprocess`.
@@ -184,8 +184,8 @@ class tmux_cmd(object):
     Notes
     -----
 
-    .. versionchanged:: 0.8
-        Renamed from ``tmux`` to ``tmux_cmd``.
+    .. versionadded:: 0.8.4
+        Wrap to split execution from command from instance of it
     """
 
     def __init__(self, *args, **kwargs):
@@ -233,6 +233,38 @@ class tmux_cmd(object):
 
         logger.debug('self.stdout for %s: \n%s' % (' '.join(cmd), self.stdout))
         return self
+
+
+def tmux_cmd(*args, **kwargs):
+    """Wrapper around TmuxCommand. Executes instantly.
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+        proc = tmux_cmd('new-session', '-s%' % 'my session')
+
+        if proc.stderr:
+            raise exc.LibTmuxException(
+                'Command: %s returned error: %s' % (proc.cmd, proc.stderr)
+            )
+
+        print('tmux command returned %s' % proc.stdout)
+
+    Equivalent to:
+
+    .. code-block:: bash
+
+        $ tmux new-session -s my session
+
+    Notes
+    -----
+
+    .. versionchanged:: 0.8
+        Renamed from ``tmux`` to ``tmux_cmd``.
+    """
+    return TmuxCommand(*args, **kwargs).execute()
 
 
 class TmuxMappingObject(MutableMapping):
@@ -459,7 +491,7 @@ def get_version():
     :class:`distutils.version.LooseVersion`
         tmux version according to :func:`libtmux.common.which`'s tmux
     """
-    proc = tmux_cmd('-V').execute()
+    proc = tmux_cmd('-V')
     if proc.stderr:
         if proc.stderr[0] == 'tmux: unknown option -- V':
             if sys.platform.startswith("openbsd"):  # openbsd has no tmux -V
