@@ -143,7 +143,7 @@ class EnvironmentMixin(object):
         return vars_dict
 
 
-class tmux_cmd(object):
+class TmuxCommand(object):
 
     """
     :term:`tmux(1)` command via :py:mod:`subprocess`.
@@ -155,6 +155,88 @@ class tmux_cmd(object):
         in :func:`which`.
     append_env_path : bool
         Append environment PATHs to tmux search paths. True by default.
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+        c = tmux_cmd('new-session', '-s%' % 'my session')
+
+        # You can actually see the command in the .cmd attribute
+        print(c.cmd)
+
+        proc = c.execute()
+
+        if proc.stderr:
+            raise exc.LibTmuxException(
+                'Command: %s returned error: %s' % (proc.cmd, proc.stderr)
+            )
+
+        print('tmux command returned %s' % proc.stdout)
+
+    Equivalent to:
+
+    .. code-block:: bash
+
+        $ tmux new-session -s my session
+
+    Notes
+    -----
+
+    .. versionadded:: 0.8.4
+        Wrap to split execution from command from instance of it
+    """
+
+    def __init__(self, *args, **kwargs):
+        tmux_bin = which(
+            'tmux',
+            default_paths=kwargs.get(
+                'tmux_search_paths',
+                ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/local/bin'],
+            ),
+            append_env_path=kwargs.get('append_env_path', True),
+        )
+        if not tmux_bin:
+            raise (exc.TmuxCommandNotFound)
+
+        cmd = [tmux_bin]
+        cmd += args  # add the command arguments to cmd
+        cmd = [str_from_console(c) for c in cmd]
+
+        self.cmd = cmd
+
+    def execute(self):
+        cmd = self.cmd
+        try:
+            self.process = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            stdout, stderr = self.process.communicate()
+            returncode = self.process.returncode
+        except Exception as e:
+            logger.error('Exception for %s: \n%s' % (subprocess.list2cmdline(cmd), e))
+
+        self.returncode = returncode
+
+        self.stdout = console_to_str(stdout)
+        self.stdout = self.stdout.split('\n')
+        self.stdout = list(filter(None, self.stdout))  # filter empty values
+
+        self.stderr = console_to_str(stderr)
+        self.stderr = self.stderr.split('\n')
+        self.stderr = list(filter(None, self.stderr))  # filter empty values
+
+        if 'has-session' in cmd and len(self.stderr):
+            if not self.stdout:
+                self.stdout = self.stderr[0]
+
+        logger.debug('self.stdout for %s: \n%s' % (' '.join(cmd), self.stdout))
+        return self
+
+
+def tmux_cmd(*args, **kwargs):
+    """Wrapper around TmuxCommand. Executes instantly.
 
     Examples
     --------
@@ -182,49 +264,7 @@ class tmux_cmd(object):
     .. versionchanged:: 0.8
         Renamed from ``tmux`` to ``tmux_cmd``.
     """
-
-    def __init__(self, *args, **kwargs):
-        tmux_bin = which(
-            'tmux',
-            default_paths=kwargs.get(
-                'tmux_search_paths',
-                ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/local/bin'],
-            ),
-            append_env_path=kwargs.get('append_env_path', True),
-        )
-        if not tmux_bin:
-            raise (exc.TmuxCommandNotFound)
-
-        cmd = [tmux_bin]
-        cmd += args  # add the command arguments to cmd
-        cmd = [str_from_console(c) for c in cmd]
-
-        self.cmd = cmd
-
-        try:
-            self.process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            stdout, stderr = self.process.communicate()
-            returncode = self.process.returncode
-        except Exception as e:
-            logger.error('Exception for %s: \n%s' % (subprocess.list2cmdline(cmd), e))
-
-        self.returncode = returncode
-
-        self.stdout = console_to_str(stdout)
-        self.stdout = self.stdout.split('\n')
-        self.stdout = list(filter(None, self.stdout))  # filter empty values
-
-        self.stderr = console_to_str(stderr)
-        self.stderr = self.stderr.split('\n')
-        self.stderr = list(filter(None, self.stderr))  # filter empty values
-
-        if 'has-session' in cmd and len(self.stderr):
-            if not self.stdout:
-                self.stdout = self.stderr[0]
-
-        logger.debug('self.stdout for %s: \n%s' % (' '.join(cmd), self.stdout))
+    return TmuxCommand(*args, **kwargs).execute()
 
 
 class TmuxMappingObject(MutableMapping):
